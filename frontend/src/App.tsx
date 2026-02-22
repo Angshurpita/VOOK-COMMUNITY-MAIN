@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PostProvider } from "./context/PostContext";
 import GlobalChatListener from "./components/chat/GlobalChatListener";
@@ -19,6 +20,7 @@ const CreatePost = lazy(() => import("./pages/CreatePost"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Login = lazy(() => import("./pages/Login"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PostDetails = lazy(() => import("./pages/PostDetails"));
 
 const queryClient = new QueryClient({
@@ -39,43 +41,46 @@ const LoadingFallback = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <PostProvider>
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <GlobalChatListener />
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/login" element={<Login />} />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <PostProvider>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
+            <GlobalChatListener />
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
 
-              {/* Protected Layout Route - Keeps Background3D persistent */}
-              <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<Index />} />
-                <Route path="/create" element={<CreatePost />} />
-                <Route path="/profile/:userId?" element={<Profile />} />
-                <Route path="/community/:communityId?" element={<Community />} />
-                <Route path="/chats/:chatId?" element={<Chats />} />
-                <Route path="/alerts" element={<Alerts />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/post/:postId" element={<PostDetails />} />
-              </Route>
+                {/* Protected Layout Route - Keeps Background3D persistent */}
+                <Route element={<ProtectedRoute />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/create" element={<CreatePost />} />
+                  <Route path="/profile/:userId?" element={<Profile />} />
+                  <Route path="/community/:communityId?" element={<Community />} />
+                  <Route path="/chats/:chatId?" element={<Chats />} />
+                  <Route path="/alerts" element={<Alerts />} />
+                  <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/post/:postId" element={<PostDetails />} />
+                </Route>
 
-              {/* Catch-all */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </PostProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+                {/* Catch-all */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </PostProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

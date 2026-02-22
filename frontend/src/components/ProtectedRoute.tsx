@@ -27,7 +27,7 @@ const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
                             .from('profiles')
                             .select('terms_accepted')
                             .eq('id', session.user.id)
-                            .single();
+                            .maybeSingle();
 
                         if (profile && profile.terms_accepted === false) {
                             setShowTerms(true);
@@ -52,7 +52,7 @@ const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
                         .from('profiles')
                         .select('terms_accepted')
                         .eq('id', session.user.id)
-                        .single();
+                        .maybeSingle();
 
                     if (profile && profile.terms_accepted === false) {
                         setShowTerms(true);

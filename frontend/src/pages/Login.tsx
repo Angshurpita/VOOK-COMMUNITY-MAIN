@@ -296,7 +296,7 @@ const Login = () => {
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: provider,
                 options: {
-                    redirectTo: `${window.location.origin}/`,
+                    redirectTo: `${window.location.origin}/auth/callback`,
                 },
             });
 

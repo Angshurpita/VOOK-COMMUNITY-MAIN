@@ -104,7 +104,7 @@ export const PostProvider = ({ children }: { children: ReactNode }) => {
                 .from('profiles')
                 .select('*')
                 .eq('id', user.id)
-                .single();
+                .maybeSingle();
 
             if (profile) {
                 return {
@@ -242,6 +242,11 @@ export const PostProvider = ({ children }: { children: ReactNode }) => {
                 .order('created_at', { ascending: false });
 
             if (filter === "campus") {
+                const userCollege = currentUser?.college;
+                if (!userCollege) {
+                    // If college is not set, return empty — don't send 'undefined' to Supabase
+                    return [];
+                }
                 query = supabase
                     .from('posts')
                     .select(`
@@ -252,7 +257,7 @@ export const PostProvider = ({ children }: { children: ReactNode }) => {
                     `)
                     .order('created_at', { ascending: false })
                     .eq('community_tag', 'Campus Only')
-                    .eq('profiles.college', currentUser?.college);
+                    .eq('profiles.college', userCollege);
             } else if (filter === "followers") {
                 // For "Followers only" tag: Show posts tagged 'Followers only' 
                 // made by people I follow (plus my own)
@@ -409,26 +414,40 @@ export const PostProvider = ({ children }: { children: ReactNode }) => {
     // --- Mutations ---
     const addPostMutation = useMutation({
         mutationFn: async (newPostData: Omit<FeedPostData, "id" | "timestamp" | "upvotes" | "comments">) => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Not logged in");
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) throw new Error("Not logged in");
+
+            const user = session.user;
+
+            const isPersonalPost = !newPostData.communityId;
 
             const postPayload = {
                 user_id: user.id,
                 content: newPostData.content,
                 image_urls: newPostData.images || [],
                 community_tag: newPostData.communityTag,
-                community_id: newPostData.communityId,
-                post_type: newPostData.postType || 'personal',
+                community_id: newPostData.communityId || null,
+                post_type: isPersonalPost ? 'personal' : 'community',
                 is_official: false,
                 is_anonymous: isAnonymousMode,
-                created_at: new Date().toISOString(),
                 upvotes: 0,
                 comments_count: 0,
                 visibility: newPostData.visibility || (newPostData.communityTag === 'Followers only' ? 'followers' : newPostData.communityTag === 'Campus Only' ? 'campus' : 'public')
             };
 
-            const { error } = await supabase.from('posts').insert(postPayload);
-            if (error) throw error;
+            console.log('[PostContext] Inserting post:', postPayload);
+
+            // Wrap in timeout to prevent infinite hang
+            const insertPromise = supabase.from('posts').insert(postPayload);
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Post creation timed out. Please try again.')), 15000)
+            );
+
+            const { error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+            if (error) {
+                console.error('[PostContext] Insert error:', error);
+                throw error;
+            }
             return true;
         },
         onSuccess: () => {

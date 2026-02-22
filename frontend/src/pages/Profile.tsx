@@ -148,7 +148,13 @@ const Profile = () => {
   // Fetch Profile Data
   useEffect(() => {
     const fetchProfileData = async () => {
-      // Only show top loading bar if we don't have profile data yet
+      // Early return if we already have data for this user
+      if (profile && userId === profile.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Only show loading bar if we don't have profile data yet
       if (!profile) setIsLoading(true);
 
       try {
@@ -194,51 +200,156 @@ const Profile = () => {
               following: 0,
               upvotes: 0
             });
+
+            // Set loading timeout to prevent infinite loading
+            setTimeout(() => setIsLoading(false), 5000);
           } else {
-            // SHOW REAL PROFILE
-            let query = supabase.from('profiles').select('*');
+            // SHOW REAL PROFILE - Optimized Backend API Calls
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
 
-            if (targetId.startsWith('@')) {
-              query = query.eq('username', targetId);
-            } else if (isUUID) {
-              query = query.eq('id', targetId);
-            } else {
-              query = query.eq('username', targetId);
-            }
+            try {
+              let profileUrl;
+              let apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
-            const { data: profileData, error } = await query.single();
-
-            if (profileData) {
-              setProfile(profileData);
-              // Only reset form if blank
-              if (!editForm.name) {
-                setEditForm({
-                  name: profileData.full_name || "",
-                  username: profileData.username || "",
-                  bio: profileData.bio || "",
-                  department: profileData.department || "",
-                  college: profileData.college || "",
-                  passOutYear: profileData.passout_year || "",
-                  avatar: profileData.avatar_url || "",
-                  backgroundImage: profileData.background_url || null
-                });
+              if (targetId.startsWith('@')) {
+                // For username lookup, use search endpoint
+                profileUrl = `/api/profiles/search?username=${encodeURIComponent(targetId)}`;
+              } else if (isUUID) {
+                // Direct UUID lookup
+                profileUrl = `/api/profiles/${targetId}`;
+              } else {
+                // For other cases, try username search
+                profileUrl = `/api/profiles/search?username=${encodeURIComponent(targetId)}`;
               }
 
-              const { count: postCount } = await supabase
-                .from('posts')
-                .select('id', { count: 'exact', head: true })
-                .eq('user_id', profileData.id)
-                .eq('is_anonymous', false);
+              // Single API call with timeout and error handling
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => {
+                console.warn("Profile API call timeout - aborting");
+                controller.abort();
+              }, 8000); // 8 second timeout
 
-              setStats({
-                posts: postCount || 0,
-                followers: profileData.followers || 0,
-                following: profileData.following || 0,
-                upvotes: (postCount || 0) * 5
+              const response = await fetch(`${apiUrl}${profileUrl}`, {
+                signal: controller.signal,
+                headers: {
+                  'Content-Type': 'application/json',
+                }
               });
 
-              // We rely on Context 'isFollowing' now, no need to manually fetch 'follows' table here.
+              clearTimeout(timeoutId);
+
+              if (!response.ok) {
+                if (response.status === 404) {
+                  setProfile(null);
+                  setIsLoading(false);
+                  return;
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const { profile: profileData } = await response.json();
+
+              if (profileData) {
+                setProfile(profileData);
+
+                // Only reset form if blank
+                if (!editForm.name) {
+                  setEditForm({
+                    name: profileData.full_name || "",
+                    username: profileData.username || "",
+                    bio: profileData.bio || "",
+                    department: profileData.department || "",
+                    college: profileData.college || "",
+                    passOutYear: profileData.passout_year || "",
+                    avatar: profileData.avatar_url || "",
+                    backgroundImage: profileData.background_url || null
+                  });
+                }
+
+                // Optimized: Fetch post count in parallel with profile data
+                const postsController = new AbortController();
+                const postsTimeoutId = setTimeout(() => {
+                  console.warn("Posts API call timeout - aborting");
+                  postsController.abort();
+                }, 5000); // 5 second timeout
+
+                const postsResponse = await fetch(`${apiUrl}/api/posts?user_id=${profileData.id}&limit=1`, {
+                  signal: postsController.signal,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+
+                clearTimeout(postsTimeoutId);
+
+                const postsData = postsResponse.ok ? await postsResponse.json() : { pagination: { total: 0 } };
+
+                setStats({
+                  posts: postsData.pagination?.total || 0,
+                  followers: profileData.followers || 0,
+                  following: profileData.following || 0,
+                  upvotes: (postsData.pagination?.total || 0) * 5
+                });
+              } else {
+                setProfile(null);
+              }
+            } catch (apiError) {
+              console.error("Error fetching profile via API:", apiError);
+
+              // Only use fallback if it's a network error, not for 404s
+              if (apiError.name !== 'AbortError' && !apiError.message.includes('404')) {
+                console.log("Falling back to direct Supabase due to API error");
+
+                // Fallback to direct Supabase (optimized)
+                try {
+                  let query = supabase.from('profiles').select('*');
+
+                  if (targetId.startsWith('@')) {
+                    query = query.eq('username', targetId);
+                  } else if (isUUID) {
+                    query = query.eq('id', targetId);
+                  } else {
+                    query = query.eq('username', targetId);
+                  }
+
+                  const { data: profileData, error: supabaseError } = await query.maybeSingle();
+
+                  if (profileData) {
+                    setProfile(profileData);
+                    if (!editForm.name) {
+                      setEditForm({
+                        name: profileData.full_name || "",
+                        username: profileData.username || "",
+                        bio: profileData.bio || "",
+                        department: profileData.department || "",
+                        college: profileData.college || "",
+                        passOutYear: profileData.passout_year || "",
+                        avatar: profileData.avatar_url || "",
+                        backgroundImage: profileData.background_url || null
+                      });
+                    }
+
+                    // Optimized: Simplified post count query
+                    const { count: postCount } = await supabase
+                      .from('posts')
+                      .select('id', { count: 'exact', head: true })
+                      .eq('user_id', profileData.id)
+                      .eq('is_anonymous', false);
+
+                    setStats({
+                      posts: postCount || 0,
+                      followers: profileData.followers || 0,
+                      following: profileData.following || 0,
+                      upvotes: (postCount || 0) * 5
+                    });
+                  } else {
+                    setProfile(null);
+                  }
+                } catch (fallbackError) {
+                  console.error("Fallback to Supabase also failed:", fallbackError);
+                  setProfile(null);
+                }
+              }
+            } finally {
+              setIsLoading(false);
             }
           }
         }
@@ -250,7 +361,7 @@ const Profile = () => {
     };
 
     fetchProfileData();
-  }, [userId, ctxUser.id, isEditing]); // Re-fetch on edit close to refresh
+  }, [userId, ctxUser?.id, isEditing]); // Removed profile dependency to prevent re-fetches
 
   const fetchMutuals = async (targetId: string) => {
     try {

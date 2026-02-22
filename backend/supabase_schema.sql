@@ -83,7 +83,6 @@ create table if not exists public.likes (
   user_id uuid references public.profiles(id) not null,
   post_id uuid references public.posts(id) not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   is_anonymous boolean default false,
   primary key (user_id, post_id, is_anonymous)
 );
@@ -518,6 +517,22 @@ create policy "Users can send messages to their chats"
 create index if not exists idx_messages_chat_id on public.messages(chat_id);
 create index if not exists idx_messages_created_at on public.messages(created_at);
 create index if not exists idx_chat_participants_user_id on public.chat_participants(user_id);
+
+-- Additional performance indexes for frequently queried columns
+create index if not exists idx_posts_user_id on public.posts(user_id);
+create index if not exists idx_posts_created_at on public.posts(created_at);
+create index if not exists idx_posts_community_tag on public.posts(community_tag);
+create index if not exists idx_likes_post_id on public.likes(post_id);
+create index if not exists idx_likes_user_id on public.likes(user_id);
+create index if not exists idx_follows_follower_id on public.follows(follower_id);
+create index if not exists idx_follows_following_id on public.follows(following_id);
+create index if not exists idx_bookmarks_user_id on public.bookmarks(user_id);
+create index if not exists idx_bookmarks_post_id on public.bookmarks(post_id);
+create index if not exists idx_stories_user_id on public.stories(user_id);
+create index if not exists idx_stories_created_at on public.stories(created_at);
+create index if not exists idx_stories_expires_at on public.stories(expires_at);
+create index if not exists idx_notifications_recipient_id on public.notifications(recipient_id);
+create index if not exists idx_notifications_created_at on public.notifications(created_at);
 
 -- 10. COMMUNITIES (WhatsApp Style)
 create table if not exists public.communities (

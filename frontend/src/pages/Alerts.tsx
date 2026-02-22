@@ -122,7 +122,7 @@ const Alerts = () => {
             .from("notifications")
             .select("*")
             .eq("id", id)
-            .single();
+            .maybeSingle();
 
         if (error || !notifData) {
             console.error("Error fetching new notification", error);
@@ -135,7 +135,7 @@ const Alerts = () => {
                 .from("profiles")
                 .select("id, username, full_name, avatar_url")
                 .eq("id", notifData.actor_id)
-                .single();
+                .maybeSingle();
             actor = actorData;
         }
 

@@ -87,7 +87,7 @@ const Notifications = () => {
                 actor:actor_id (id, full_name, username, avatar_url)
             `)
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (data) {
             setNotifications(prev => [data, ...prev]);

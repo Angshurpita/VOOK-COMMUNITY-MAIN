@@ -100,79 +100,84 @@ const CreatePost = () => {
 
         setIsPosting(true);
 
-        // Upload Images
-        const uploadedImageUrls: string[] = [];
-        for (const file of selectedImageFiles) {
-            try {
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage
-                    .from('images') // Ensure 'images' bucket exists
-                    .upload(fileName, file);
+        try {
+            // Upload Images
+            const uploadedImageUrls: string[] = [];
+            for (const file of selectedImageFiles) {
+                try {
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const { error: uploadError } = await supabase.storage
+                        .from('images')
+                        .upload(fileName, file);
 
-                if (uploadError) {
-                    console.error("Image upload failed:", uploadError);
-                    toast.error(`Failed to upload ${file.name}`);
-                    continue;
+                    if (uploadError) {
+                        console.error("Image upload failed:", uploadError);
+                        toast.error(`Failed to upload ${file.name}`);
+                        continue;
+                    }
+
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('images')
+                        .getPublicUrl(fileName);
+
+                    uploadedImageUrls.push(publicUrl);
+                } catch (error) {
+                    console.error("Upload process error:", error);
                 }
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('images')
-                    .getPublicUrl(fileName);
-
-                uploadedImageUrls.push(publicUrl);
-            } catch (error) {
-                console.error("Upload process error:", error);
             }
-        }
 
-        // Map Visibility
-        let uiVisibility = visibility;
-        let dbVisibility: 'public' | 'campus' | 'followers' = 'public';
-        let communityTag = "Public";
+            // Map Visibility
+            let dbVisibility: 'public' | 'campus' | 'followers' = 'public';
+            let communityTag = "Anyone";
 
-        if (visibility === "Campus Only") {
-            dbVisibility = 'campus';
-            communityTag = "Campus Only";
-        } else if (visibility === "Followers only") {
-            dbVisibility = 'followers';
-            communityTag = "Followers only";
-        }
+            if (visibility === "Campus Only") {
+                dbVisibility = 'campus';
+                communityTag = "Campus Only";
+            } else if (visibility === "Followers only") {
+                dbVisibility = 'followers';
+                communityTag = "Followers only";
+            }
 
-        const newPost = {
-            author: {
-                name: currentUser.name,
-                username: currentUser.username,
-                initials: currentUser.initials,
-                college: currentUser.college,
-                avatar: currentUser.avatar,
-                id: currentUser.id || ""
-            },
-            communityTag: communityTag,
-            visibility: dbVisibility,
-            content: content,
-            images: uploadedImageUrls,
-            documents: selectedDocs.length > 0 ? selectedDocs.map(f => ({
-                name: f.name,
-                size: (f.size / 1024).toFixed(1) + " KB",
-                url: "#",
-                type: f.name.split('.').pop() || "FILE"
-            })) : undefined,
-            poll: isPollActive ? {
-                question: pollQuestion,
-                options: pollOptions.filter(o => o.trim() !== "").map(text => ({ text, percentage: 0 })),
-                totalVotes: 0
-            } : undefined
-        };
+            const newPost = {
+                author: {
+                    name: currentUser.name,
+                    username: currentUser.username,
+                    initials: currentUser.initials,
+                    college: currentUser.college,
+                    avatar: currentUser.avatar,
+                    id: currentUser.id || ""
+                },
+                communityTag: communityTag,
+                visibility: dbVisibility,
+                content: content,
+                images: uploadedImageUrls,
+                documents: selectedDocs.length > 0 ? selectedDocs.map(f => ({
+                    name: f.name,
+                    size: (f.size / 1024).toFixed(1) + " KB",
+                    url: "#",
+                    type: f.name.split('.').pop() || "FILE"
+                })) : undefined,
+                poll: isPollActive ? {
+                    question: pollQuestion,
+                    options: pollOptions.filter(o => o.trim() !== "").map(text => ({ text, percentage: 0 })),
+                    totalVotes: 0
+                } : undefined
+            };
 
-        const success = await addPost(newPost);
-        setIsPosting(false);
+            const success = await addPost(newPost);
 
-        if (success) {
-            toast.success("Post created successfully!");
-            navigate("/");
-        } else {
-            toast.error("Failed to create post");
+            if (success) {
+                toast.success("Post created successfully!");
+                navigate("/");
+            } else {
+                toast.error("Failed to create post");
+            }
+        } catch (error: any) {
+            console.error("Post creation error:", error);
+            toast.error(error?.message || "Something went wrong while creating the post");
+        } finally {
+            setIsPosting(false);
         }
     };
 
